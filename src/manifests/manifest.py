@@ -46,6 +46,8 @@ class Manifest(ABC, Generic[T]):
 
     @classmethod
     def from_version(cls, version: str) -> Type[T]:
+        print(f"Version is {version}")
+        print(f"CLS.VERSION is {cls.VERSIONS}")
         if cls.VERSIONS is None:
             return cls  # type: ignore[return-value]
         if version in [None, ""]:

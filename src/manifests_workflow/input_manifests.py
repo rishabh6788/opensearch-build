@@ -10,7 +10,9 @@ import logging
 import os
 import re
 from abc import abstractmethod
+import sys
 from typing import Dict, List, Type, Union
+from manifests.input.input_manifest_1_0 import InputComponentFromSource_1_0
 
 import ruamel.yaml
 
@@ -104,6 +106,7 @@ class InputManifests(Manifests):
                 logging.info(f"{self.name}#{branch} is version {version}")
                 if version not in main_versions.keys():
                     main_versions[version] = [c]
+            print(f"Main Versions are {main_versions}")
 
             if component_klass is not None:
                 # components can increment their own version first without incrementing min
@@ -113,14 +116,14 @@ class InputManifests(Manifests):
                     if component.name == self.name:
                         continue
 
-                    if type(component) is ComponentFromSource:
+                    if type(component) in [ComponentFromSource, InputComponentFromSource_1_0]:
                         logging.info(f"Checking out {component.name}#main")
                         component = component_klass.checkout(
                             name=component.name,
                             path=os.path.join(work_dir.name, component.name),
-                            opensearch_version=manifest.build.version,
+                            opensearch_version='2.12.0',
                             repo_url=component.repository,
-                            branch="main",
+                            branch="2.x", # Assuming that 2.x is the live version and any new release will be happening on this branch.
                         )
 
                         component_version = component.version
