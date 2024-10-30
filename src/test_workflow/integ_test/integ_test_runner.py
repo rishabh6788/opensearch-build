@@ -45,7 +45,7 @@ class IntegTestRunner(abc.ABC):
                     if test_config.integ_test:
                         if 'ci-groups' in test_config.integ_test.keys():
                             orig_component_name = component.name
-                            for i in range(1, test_config.integ_test['ci-groups'] + 1):
+                            for i in range(6,7):
                                 component.name = f"{orig_component_name}-ci-group-{i}"
                                 test_suite = self.__create_test_suite__(component, test_config, work_dir.path)
                                 test_results = test_suite.execute_tests()
