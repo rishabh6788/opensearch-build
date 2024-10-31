@@ -23,6 +23,7 @@ class TestArgs:
     logging_level: int
     test_manifest_path: str
     paths: dict
+    ci_group: str
 
     def __init__(self) -> None:
         parser = argparse.ArgumentParser(description="Test an OpenSearch Bundle")
@@ -30,6 +31,7 @@ class TestArgs:
         parser.add_argument("-p", "--paths", nargs='*', action=TestKwargs, default={}, help="Specify paths for OpenSearch and OpenSearch Dashboards.")
         # e.g. --base-path https://ci.opensearch.org/ci/dbc/integ-test/2.7.0/7771/linux/x64/tar/
         parser.add_argument("--base-path", type=str, default="", help="Specify base paths for the integration test logs.")
+        parser.add_argument("--ci-group", type=str, default=None, help="ci group number.")
         parser.add_argument("--test-run-id", type=int, help="The unique execution id for the test")
         parser.add_argument("--component", type=str, dest="components", nargs='*', help="Test a specific component or components instead of the entire distribution.")
         parser.add_argument("--keep", dest="keep", action="store_true", help="Do not delete the working temporary directory.")
@@ -44,6 +46,7 @@ class TestArgs:
         self.test_manifest_path = args.test_manifest_path
         self.paths = args.paths
         self.base_path = args.base_path
+        self.ci_group = args.ci_group
 
 
 TestArgs.__test__ = False  # type:ignore

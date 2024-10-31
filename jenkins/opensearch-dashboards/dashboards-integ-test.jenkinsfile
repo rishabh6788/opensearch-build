@@ -1,0 +1,376 @@
+/*
+ * Copyright OpenSearch Contributors
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The OpenSearch Contributors require contributions made to
+ * this file be licensed under the Apache-2.0 license or a
+ * compatible open source license.
+ */
+
+lib = library(identifier: 'jenkins@main', retriever: modernSCM([
+    $class: 'GitSCMSource',
+    remote: 'https://github.com/rishabh6788/opensearch-build-libraries.git',
+]))
+
+def docker_images = [
+    "tar": "opensearchstaging/ci-runner:ci-runner-almalinux8-opensearch-dashboards-integtest-v1",
+    "rpm": "opensearchstaging/ci-runner:ci-runner-almalinux8-systemd-base-integtest-v1",
+    "deb": "opensearchstaging/ci-runner:ci-runner-ubuntu2004-systemd-base-integtest-v3",
+    "zip": "opensearchstaging/ci-runner:ci-runner-windows2019-opensearch-build-v1",
+]
+
+def docker_args = [
+    "tar": "-u 1000 --cpus 4 -m 16g -e BROWSER_PATH=electron",
+    "rpm": "--entrypoint=/usr/lib/systemd/systemd -u root --privileged -v /sys/fs/cgroup:/sys/fs/cgroup:rw --cgroupns=host --cpus 4 -m 16g -e BROWSER_PATH=electron",
+    "deb": "--entrypoint=/usr/lib/systemd/systemd -u root --privileged -v /sys/fs/cgroup:/sys/fs/cgroup:rw --cgroupns=host --cpus 4 -m 16g -e BROWSER_PATH=electron",
+    "zip": "-u ContainerAdministrator",
+]
+
+def agent_nodes = [
+    "linux_x64": "Jenkins-Agent-AL2023-X64-M54xlarge-Docker-Host",
+    "linux_arm64": "Jenkins-Agent-AL2023-Arm64-M6g4xlarge-Docker-Host",
+    "windows_x64": "Jenkins-Agent-Windows2019-X64-M54xlarge-Docker-Host",
+]
+
+pipeline {
+    options {
+        timeout(time: 7, unit: 'HOURS')
+        buildDiscarder(logRotator(daysToKeepStr: '60'))
+    }
+    agent none
+    environment {
+        BUILD_MANIFEST = "build-manifest.yml"
+        BUILD_MANIFEST_OPENSEARCH = "build-manifest-opensearch.yml"
+        BUILD_JOB_NAME = "distribution-build-opensearch-dashboards"
+        BUILD_JOB_NAME_OPENSEARCH = "distribution-build-opensearch"
+        ARTIFACT_BUCKET_NAME = credentials('jenkins-artifact-bucket-name')
+    }
+    parameters {
+        string(
+            name: 'COMPONENT_NAME',
+            description: 'If this field contains one or more component names (e.g. notificationsDashboards indexManagementDashboards ...) separated by space, will test with "--component ...", else test everything in the TEST_MANIFEST..',
+            trim: true
+        )
+        string(
+            name: 'TEST_MANIFEST',
+            description: 'Test manifest under the manifests folder, e.g. 2.0.0/opensearch-dashboards-2.0.0-test.yml.',
+            trim: true
+        )
+        string(
+            name: 'BUILD_MANIFEST_URL',
+            description: 'The build manifest URL for OpenSearch Dashboards, e.g. https://ci.opensearch.org/ci/dbc/distribution-build-opensearch-dashboards/2.9.0/6391/linux/x64/tar/builds/opensearch-dashboards/manifest.yml.',
+            trim: true
+        )
+        string(
+            name: 'BUILD_MANIFEST_URL_OPENSEARCH',
+            description: 'The build manifest URL OpenSearch, e.g. "https://ci.opensearch.org/ci/dbc/distribution-build-opensearch/2.9.0/8172/linux/x64/tar/builds/opensearch/manifest.yml".',
+            trim: true
+        )
+        string(
+            name: 'RC_NUMBER',
+            description: 'The RC build count. Default is 0 which means its not an RC build.',
+            defaultValue: '0'
+        )
+        booleanParam(
+            name: 'VALIDATE_ARTIFACTS',
+            description: 'If true the provided artifacts are validated before triggering integ-tests else skip the validation stage',
+            defaultValue: true
+        )
+    }
+    stages {
+        stage('verify-parameters') {
+            agent { label agent_nodes["linux_x64"] }
+            steps {
+                script {
+                    if (TEST_MANIFEST == '' || !fileExists("manifests/${TEST_MANIFEST}")) {
+                        currentBuild.result = 'ABORTED'
+                        error("Integration Tests failed to start. Test manifest was not provided or not found in manifests/${TEST_MANIFEST}.")
+                    }
+
+                    if (BUILD_MANIFEST_URL == '') {
+                        currentBuild.result = 'ABORTED'
+                        error("Integration Tests failed to start. Build manifest url was not provided.")
+                    }
+
+                    if (BUILD_MANIFEST_URL_OPENSEARCH == '') {
+                        currentBuild.result = 'ABORTED'
+                        error("Integration Tests failed to start. Build manifest url OpenSearch was not provided.")
+                    }
+
+                    downloadBuildManifest(
+                        url: BUILD_MANIFEST_URL,
+                        path: BUILD_MANIFEST
+                    )
+
+                    downloadBuildManifest(
+                        url: BUILD_MANIFEST_URL_OPENSEARCH,
+                        path: BUILD_MANIFEST_OPENSEARCH
+                    )
+
+                    def buildManifestObj = lib.jenkins.BuildManifest.new(readYaml(file: BUILD_MANIFEST))
+                    def buildManifestObjOpenSearch = lib.jenkins.BuildManifest.new(readYaml(file: BUILD_MANIFEST_OPENSEARCH))
+                    env.architecture = buildManifestObj.getArtifactArchitecture()
+                    env.platform = buildManifestObj.getArtifactPlatform()
+                    env.buildId = buildManifestObj.getArtifactBuildId()
+                    env.buildIdOpenSearch = buildManifestObjOpenSearch.getArtifactBuildId()
+                    env.distribution = buildManifestObj.getDistribution()
+                    env.version = buildManifestObj.build.version
+                    env.versionOpenSearch = buildManifestObjOpenSearch.build.version
+                    env.platform = buildManifestObj.build.platform
+                    env.artifactPath = buildManifestObj.getArtifactRoot(BUILD_JOB_NAME, buildId)
+                    env.artifactPathOpenSearch = buildManifestObjOpenSearch.getArtifactRoot(BUILD_JOB_NAME_OPENSEARCH, buildIdOpenSearch)
+                    env.AGENT_LABEL = agent_nodes["${env.platform}_${architecture}"]
+
+                    echo "Version: ${version}, VersionOpenSearch: ${versionOpenSearch}, Agent: ${AGENT_LABEL}, OSD_BuildId: ${buildId}, OS_BuildId: ${buildIdOpenSearch}, Distribution: ${distribution}"
+                    currentBuild.description = "$architecture, $platform, osd-$version-$buildId, os-$versionOpenSearch-$buildIdOpenSearch, $distribution"
+
+                    if (! env.version.equals(env.versionOpenSearch)) {
+                        currentBuild.result = 'ABORTED'
+                        error("OSD Version $version does not match OS Version $versionOpenSearch")
+                    }
+                }
+            }
+            post {
+                always {
+                    postCleanup()
+                }
+            }
+        }
+        stage('validate-artifacts') {
+            when {
+                expression {
+                    params.VALIDATE_ARTIFACTS == true
+                }
+            }
+            agent { label agent_nodes['linux_x64'] }
+            steps {
+                script {
+                    build job: 'distribution-validation',
+                    propagate: true,
+                    wait: true,
+                    parameters: [
+                        string(name: 'VERSION', value: "${env.version}"),
+                        string(name: 'DISTRIBUTION', value: "${env.distribution}"),
+                        string(name: 'ARCHITECTURE', value: "${env.architecture}"),
+                        string(name: 'OS_BUILD_NUMBER', value: "${env.buildIdOpenSearch}"),
+                        string(name: 'OSD_BUILD_NUMBER', value: "${env.buildId}"),
+                        string(name: 'PROJECTS', value: "Both"),
+                        string(name: 'ARTIFACT_TYPE', value: "staging")
+                    ]
+                }
+            }
+            post {
+                always {
+                    postCleanup()
+                }
+            }
+        }
+        stage('integ-test') {
+            // Need to run this directly on agent node here in order to trigger stages with docker container and avoid docker within docker situation
+            // Can only be run in runner that is at least 50GB per container
+            agent { label AGENT_LABEL }
+            steps {
+                script {
+
+                    downloadBuildManifest(
+                        url: BUILD_MANIFEST_URL,
+                        path: BUILD_MANIFEST
+                    )
+
+                    def buildManifestObj = lib.jenkins.BuildManifest.new(readYaml(file: BUILD_MANIFEST))
+                    def componentDefaultList = buildManifestObj.getNames()
+                    def componentList = ['OpenSearch-Dashboards-ci-group-1', 'OpenSearch-Dashboards-ci-group-2', 'OpenSearch-Dashboards-ci-group-3', 'OpenSearch-Dashboards-ci-group-4',
+                    'OpenSearch-Dashboards-ci-group-4', 'OpenSearch-Dashboards-ci-group-5', 'OpenSearch-Dashboards-ci-group-6', 'OpenSearch-Dashboards-ci-group-7', 'OpenSearch-Dashboards-ci-group-8',
+                    'OpenSearch-Dashboards-ci-group-9']
+                    String switch_user_non_root = (distribution.equals('rpm') || distribution.equals('deb')) ? 'true' : 'false'
+                    echo "switch_user_non_root: ${switch_user_non_root}"
+
+
+                    if (env.platform != 'windows') {
+                        echo "Not on Windows, stash repository+artifacts"
+                        echo "Downloading from S3: ${artifactPathOpenSearch}"
+                        downloadFromS3(
+                            assumedRoleName: 'opensearch-bundle',
+                            roleAccountNumberCred: 'jenkins-aws-account-public',
+                            downloadPath: "${artifactPathOpenSearch}/",
+                            bucketName: "${ARTIFACT_BUCKET_NAME}",
+                            localPath: "${WORKSPACE}/artifacts",
+                            force: true
+                          )
+                        sh("cp -a $WORKSPACE/artifacts/${artifactPathOpenSearch} $WORKSPACE")
+
+                        echo "Downloading from S3: ${artifactPath}"
+                        downloadFromS3(
+                            assumedRoleName: 'opensearch-bundle',
+                            roleAccountNumberCred: 'jenkins-aws-account-public',
+                            downloadPath: "${artifactPath}/",
+                            bucketName: "${ARTIFACT_BUCKET_NAME}",
+                            localPath: "${WORKSPACE}/artifacts",
+                            force: true
+                          )
+                        sh("cp -a $WORKSPACE/artifacts/${artifactPath} $WORKSPACE")
+                        sh("rm -rf $WORKSPACE/artifacts")
+
+                    }
+                    else {
+                        echo "On Windows Platform, stash repository only"
+                    }
+
+                    // Stash the current working directory files, aka opensearch-build repo
+                    // Unstash later in each triggered stage to run integTest
+                    stash includes: "**", name: "integtest-opensearch-dashboards-$BUILD_NUMBER"
+
+                    componentTests = [:]
+
+                    for (int i = 1; i <= 9; i++) {
+                        // Must use local variable due to groovy for loop and closure scope
+                        // Or the stage will be fixed to the last item in return when new stages are triggered here
+                        // https://web.archive.org/web/20181121065904/http://blog.freeside.co/2013/03/29/groovy-gotcha-for-loops-and-closure-scope/
+                        def local_component = 'OpenSearch-Dashboards'
+                        def wait_seconds = i * 20
+                        def ciNum = i.toString()
+
+                        echo "Adding Component: ${local_component}-ci-group-${ciNum}"
+                        componentTests["Run Integtest ${local_component}-ci-group-${ciNum}"] = {
+                            // Using scripted pipelines to trigger dynamic parallel stages
+                            timeout(time: 6, unit: 'HOURS') {
+                                node(AGENT_LABEL) {
+                                    docker.withRegistry('https://public.ecr.aws/') {
+                                        docker.image(docker_images["$distribution"]).inside(docker_args["$distribution"]) {
+                                            try {
+                                                stage("${local_component}-ci-group-${ciNum}") {
+                                                    // Jenkins tend to not clean up workspace at times even though ws clean is called
+                                                    // Since docker is mounted on the agent node directly so it can communicated with the agent
+                                                    // This sometimes causes the workspace to retain last run test-results and ends with build failures
+                                                    // https://github.com/opensearch-project/opensearch-build/blob/6ed1ce3c583233eae4fe1027969d778cfc7660f7/src/test_workflow/test_recorder/test_recorder.py#L99
+                                                    sh("echo ${local_component}-ci-group-${ciNum} will sleep ${wait_seconds} seconds to reduce load && sleep ${wait_seconds}")
+                                                    unstash "integtest-opensearch-dashboards-$BUILD_NUMBER"
+                                                    if (env.platform == 'windows') {
+                                                        echo "On Windows Platform, unstash repository and download the artifacts"
+                                                        echo "Downloading from S3: ${artifactPathOpenSearch}"
+                                                        downloadFromS3(
+                                                            assumedRoleName: 'opensearch-bundle',
+                                                            roleAccountNumberCred: 'jenkins-aws-account-public',
+                                                            downloadPath: "${artifactPathOpenSearch}/",
+                                                            bucketName: "${ARTIFACT_BUCKET_NAME}",
+                                                            localPath: "${WORKSPACE}/artifacts",
+                                                            force: true
+                                                          )
+                                                        sh("cp -a $WORKSPACE/artifacts/${artifactPathOpenSearch} $WORKSPACE")
+
+                                                        echo "Downloading from S3: ${artifactPath}"
+                                                        downloadFromS3(
+                                                            assumedRoleName: 'opensearch-bundle',
+                                                            roleAccountNumberCred: 'jenkins-aws-account-public',
+                                                            downloadPath: "${artifactPath}/",
+                                                            bucketName: "${ARTIFACT_BUCKET_NAME}",
+                                                            localPath: "${WORKSPACE}/artifacts",
+                                                            force: true
+                                                          )
+                                                        sh("cp -a $WORKSPACE/artifacts/${artifactPath} $WORKSPACE")
+                                                        sh("rm -rf $WORKSPACE/artifacts")
+                                                    }
+                                                    else {
+                                                        echo "Not on Windows, unstash repository+artifacts"
+                                                    }
+
+                                                    sh("rm -rf test-results")
+                                                    runIntegTestScript(
+                                                        jobName: "$BUILD_JOB_NAME",
+                                                        componentName: "${local_component}",
+                                                        buildManifest: "$BUILD_MANIFEST",
+                                                        testManifest: "manifests/${TEST_MANIFEST}",
+                                                        localPath: "${WORKSPACE}/${distribution}",
+                                                        switchUserNonRoot: "${switch_user_non_root}",
+                                                        ciGroup: ciNum
+                                                    )
+                                                }
+                                            } catch (e) {
+                                                throw new Exception("Error running integtest for component ${local_component}", e)
+                                            } finally {
+                                                echo "Completed running integtest for component ${local_component}"
+                                                uploadTestResults(
+                                                    buildManifestFileName: BUILD_MANIFEST,
+                                                    jobName: JOB_NAME
+                                                )
+                                                postCleanup()
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    parallel componentTests
+                }
+            }
+            post {
+                always {
+                    script {
+                        retry(5) {
+                            node(AGENT_LABEL) {
+                                docker.withRegistry('https://public.ecr.aws/') {
+                                    docker.image(docker_images["$distribution"]).inside(docker_args["$distribution"]) {
+                                        checkout scm
+                                        sleep 10
+                                        downloadBuildManifest(
+                                            url: BUILD_MANIFEST_URL,
+                                            path: BUILD_MANIFEST
+                                        )
+                                        downloadBuildManifest(
+                                            url: BUILD_MANIFEST_URL_OPENSEARCH,
+                                            path: BUILD_MANIFEST_OPENSEARCH
+                                        )
+                                        createUploadTestReportManifest(
+                                            testManifest: "manifests/${TEST_MANIFEST}",
+                                            buildManifest: BUILD_MANIFEST_OPENSEARCH,
+                                            dashboardsBuildManifest: BUILD_MANIFEST,
+                                            testRunID: "${env.BUILD_NUMBER}",
+                                            testType: "integ-test",
+                                            rcNumber: params.RC_NUMBER,
+                                            componentName: "${COMPONENT_NAME}",
+                                        )
+                                        echo("Download report manifest from https://ci.opensearch.org/ci/dbc/integ-test-opensearch-dashboards/${env.version}/${env.buildId}/${env.platform}/${env.architecture}/${env.distribution}/test-results/${env.BUILD_NUMBER}/integ-test/test-report.yml")
+                                        archiveArtifacts artifacts: 'test-report.yml'
+                                    }
+                                }
+                            }
+                        }
+                        retry(5) {
+                            node(agent_nodes['linux_x64']) {
+                                sleep 10
+                                def rc = (params.RC_NUMBER.toInteger() > 0)
+                                sh "mkdir -p test-results-osd-${env.BUILD_NUMBER}"
+                                sh "curl -sSL https://ci.opensearch.org/ci/dbc/z-dashboards-integ-test/${env.version}/${env.buildId}/${env.platform}/${env.architecture}/${env.distribution}/test-results/${env.BUILD_NUMBER}/integ-test/test-report.yml --output test-results-osd-${env.BUILD_NUMBER}/test-report.yml"
+                                publishIntegTestResults(
+                                    distributionBuildUrl: "https://build.ci.opensearch.org/blue/organizations/jenkins/${env.BUILD_JOB_NAME}/detail/${env.BUILD_JOB_NAME}/${env.buildId}/pipeline",
+                                    jobName: env.JOB_NAME,
+                                    testReportManifestYml: "test-results-osd-${env.BUILD_NUMBER}/test-report.yml"
+                                )
+                                postCleanup()
+                            }
+                        }
+                    }
+                    postCleanup()
+                }
+            }
+        }
+    }
+    post {
+        always {
+            node(AGENT_LABEL) {
+                script {
+                    def triggerIntegTestNotification =
+                            build job: 'integ-test-notification',
+                            propagate: false,
+                            wait: false,
+                            parameters: [
+                                string(name: 'INPUT_MANIFEST', value: "${env.version}/opensearch-dashboards-${env.version}.yml"),
+                                string(name: 'DISTRIBUTION_NUMBER', value: "${env.buildId}")
+                            ]
+                    postCleanup()
+                }
+            }
+        }
+    }
+}
