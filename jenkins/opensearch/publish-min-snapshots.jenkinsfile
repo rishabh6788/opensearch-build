@@ -87,6 +87,38 @@ pipeline {
                         }
                     }
                 }
+                stage('linux-arm64-tar') {
+                    agent {
+                        docker {
+                            label AGENT_LINUX_ARM64
+                            image dockerAgent.image
+                            args dockerAgent.args
+                            registryUrl 'https://public.ecr.aws/'
+                            alwaysPull true
+                        }
+                    }
+                    steps {
+                        script {
+                            buildManifest(
+                                componentName: "OpenSearch",
+                                inputManifest: "manifests/${INPUT_MANIFEST}",
+                                platform: 'linux',
+                                architecture: 'arm64',
+                                distribution: 'tar',
+                                snapshot: true
+                            )
+                            echo("Uploading linux arm64 tar min snapshots to S3")
+                            uploadMinSnapshotsToS3(
+                                distribution: 'tar'
+                            )
+                        }
+                    }
+                    post {
+                        always {
+                            postCleanup()
+                        }
+                    }
+                }
             }
         }
     }
