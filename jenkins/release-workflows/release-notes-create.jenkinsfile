@@ -14,7 +14,7 @@ lib = library(identifier: 'jenkins@main', retriever: modernSCM([
 
 pipeline {
     options {
-            timeout(time: 2, unit: 'HOURS')
+        timeout(time: 2, unit: 'HOURS')
     }
     agent {
         docker {
@@ -45,26 +45,27 @@ pipeline {
         stage('Parameters Check') {
             steps {
                 script {
-                    if (INPUT_MANIFEST.isEmpty()) {
+                    if (params.INPUT_MANIFEST.isEmpty()) {
                         currentBuild.result = 'ABORTED'
-                        error('ACTION and RELEASE_VERSION parameters cannot be empty!')
+                        error('INPUT_MANIFEST parameter cannot be empty!')
                     }
                 }
             }
         }
         stage('Generate consolidated release notes') {
             steps {
-                def inputManifestObj = lib.jenkins.InputManifest.new(readYaml(file: "manifests/${INPUT_MANIFEST}"))
-                def componentDefaultList = inputManifestObj.getNames()
-                def componentList = COMPONENTS ? COMPONENTS.trim().split(' ') as List : componentDefaultList
-                println("Component list: ${componentList}")
+                script {
+                    def inputManifestObj = lib.jenkins.InputManifest.new(readYaml(file: "manifests/${INPUT_MANIFEST}"))
+                    def componentDefaultList = inputManifestObj.getNames()
+                    def componentList = COMPONENTS ? COMPONENTS.trim().split(' ') as List : componentDefaultList
+                    println("Component list: ${componentList}")
                 }
             }
-            post {
-                always {
-                    postCleanup()
-                }
-            }
+        }
+    }
+    post {
+        always {
+            postCleanup()
         }
     }
 }
