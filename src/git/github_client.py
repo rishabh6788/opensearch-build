@@ -22,7 +22,7 @@ from release_notes_workflow.release_notes_check_args import ReleaseNotesCheckArg
 
 
 class GitHubCommitsFetcher:
-    def __init__(self, args: ReleaseNotesCheckArgs, component: InputComponentFromSource, token: Optional[str] = None):
+    def __init__(self, after_date: str, component: InputComponent, token: Optional[str] = None):
         """
         Initialize the GitHub Commits Fetcher
 
@@ -40,7 +40,7 @@ class GitHubCommitsFetcher:
 
         # Cache for PR data to avoid duplicate API calls
         self.pr_cache = {}
-        self.release_notes_args = args
+        self.after_date = after_date
         self.component = component
 
     def _make_request(self, url: str, params: Dict = None) -> Optional[Dict]:
@@ -288,7 +288,7 @@ class GitHubCommitsFetcher:
         return grouped
 
     def get_commit_details(self):
-        iso_since_date = self.release_notes_args.date
+        iso_since_date = self.after_date
 
         iso_until_date = None
         url = self.component.repository.rstrip('/').removesuffix('.git')

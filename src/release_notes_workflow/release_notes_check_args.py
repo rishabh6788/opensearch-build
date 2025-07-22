@@ -16,10 +16,11 @@ class ReleaseNotesCheckArgs:
     manifest: List[IO]
     date: str
     output: str
+    components: List[str]
 
     def __init__(self) -> None:
         parser = argparse.ArgumentParser(description="Checkout an OpenSearch Bundle and check for CommitID and Release Notes")
-        parser.add_argument("action", choices=["check", "compile"], help="Operation to perform.")
+        parser.add_argument("action", choices=["check", "compile", "generate"], help="Operation to perform.")
         parser.add_argument("manifest", type=argparse.FileType("r"), nargs='+', help="Manifest file.")
         parser.add_argument(
             "-v",
@@ -36,6 +37,10 @@ class ReleaseNotesCheckArgs:
             dest="date",
             help="Date to retrieve the commit (in format yyyy-mm-dd, example 2022-07-26)."
         )
+        parser.add_argument("--components",
+                            dest="components",
+                            nargs='*',
+                            help="List of components to check (default: all components).")
         parser.add_argument(
             "--output",
             help="Output file."
@@ -46,5 +51,6 @@ class ReleaseNotesCheckArgs:
         self.manifest = args.manifest
         self.date = args.date
         self.output = args.output
+        self.components = args.components
         if self.action == "check" and self.date is None:
             parser.error("check option requires --date argument")
