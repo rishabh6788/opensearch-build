@@ -16,14 +16,9 @@ pipeline {
     options {
         timeout(time: 2, unit: 'HOURS')
     }
-    agent {
-        docker {
-            label 'Jenkins-Agent-AL2023-X64-M54xlarge-Docker-Host'
-            image 'opensearchstaging/ci-runner:ci-runner-almalinux8-opensearch-build-v1'
-            registryUrl 'https://public.ecr.aws/'
-            alwaysPull true
-        }
-    }
+
+    agent none
+
     parameters {
         string(
             name: 'INPUT_MANIFEST',
@@ -43,6 +38,7 @@ pipeline {
     }
     stages {
         stage('Parameters Check') {
+            agent { label 'Jenkins-Agent-AL2023-X64-M54xlarge-Docker-Host' }
             steps {
                 script {
                     if (params.INPUT_MANIFEST.isEmpty()) {
@@ -53,17 +49,43 @@ pipeline {
             }
         }
         stage('Generate consolidated release notes') {
+            agent { label 'Jenkins-Agent-AL2023-X64-M54xlarge-Docker-Host' }
             steps {
                 script {
-                    def inputManifestObj = lib.jenkins.InputManifest.new(readYaml(file: "manifests/${INPUT_MANIFEST}"))
+                    def inputManifestObj = lib.jenkins.InputManifest.new(readYaml(file: "manifests/${params.INPUT_MANIFEST}"))
                     def componentDefaultList = inputManifestObj.getNames()
-                    def componentList = COMPONENTS ? COMPONENTS.trim().split(' ') as List : componentDefaultList
+                    def componentList = params.COMPONENTS ? params.COMPONENTS.trim().split(' ') as List : componentDefaultList
                     println("Component list: ${componentList}")
                     def componentNotes = [:]
-                    for (component in componentList) {
-                        componentNotes["Release notes for ${component}"] = {
-                            def componentObj = inputManifestObj.components[component]
-                            println("Component: ${componentObj.name}, Repo: ${componentObj.repository}")
+
+                    // Method 1: Use eachWithIndex to capture values properly
+                    componentList.eachWithIndex { component, component_index ->
+                        def wait_seconds = component_index * 20
+                        // Capture the values in local variables for the closure
+                        def currentComponent = component
+                        def currentIndex = component_index
+                        def currentWaitSeconds = wait_seconds
+
+                        componentNotes["Release notes for ${currentComponent}"] = {
+                            timeout(time: 4, unit: 'HOURS') {
+                                node('Jenkins-Agent-AL2023-X64-M54xlarge-Docker-Host') {
+                                    docker.withRegistry('https://public.ecr.aws/') {
+                                        docker.image('opensearchstaging/ci-runner:ci-runner-almalinux8-opensearch-build-v1').pull()
+                                        docker.image('opensearchstaging/ci-runner:ci-runner-almalinux8-opensearch-build-v1').inside() {
+                                            try {
+                                                stage("${currentComponent}") {
+                                                    sh("echo ${currentComponent} with index ${currentIndex} will sleep ${currentWaitSeconds} seconds to reduce load && sleep ${currentWaitSeconds}")
+                                                    def componentObj = inputManifestObj.components[currentComponent]
+                                                    println("Component object: ${componentObj.name}, ${componentObj.ref}, ${componentObj.repository}")
+                                                }
+                                            }
+                                            catch (e) {
+                                                throw new Exception("Error running workflow for component ${currentComponent}", e)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                     parallel componentNotes
@@ -73,7 +95,9 @@ pipeline {
     }
     post {
         always {
-            postCleanup()
+             node('Jenkins-Agent-AL2023-X64-M54xlarge-Docker-Host') {
+                postCleanup()
+             }
         }
     }
 }
