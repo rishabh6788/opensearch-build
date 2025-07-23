@@ -78,6 +78,7 @@ pipeline {
                                                     sh("echo ${currentComponent} with index ${currentIndex} will sleep ${currentWaitSeconds} seconds to reduce load && sleep ${currentWaitSeconds}")
                                                     unstash "release-notes-opensearch-$BUILD_NUMBER"
                                                     def componentObj = inputManifestObj.components[currentComponent]
+                                                    def version = inputManifestObj.build.version
                                                     println("Component object: ${componentObj.name}, ${componentObj.ref}, ${componentObj.repository}")
                                                     echo "Current workspace is $WORKSPACE}"
                                                     withCredentials([usernamePassword(credentialsId: 'jenkins-github-bot-token', passwordVariable: 'GITHUB_TOKEN', usernameVariable: 'GITHUB_USER')]) {
@@ -85,6 +86,8 @@ pipeline {
                                                             #!/bin/bash
                                                             set +e
                                                             ./release_notes.sh generate manifests/${params.INPUT_MANIFEST} --component ${currentComponent} --date ${GIT_LOG_DATE}
+
+                                                            ls -ltr $WORKSPACE/release-notes/
 
                                                             if [ \$? -ne 0 ]; then
                                                                 echo "Release notes generation failed for component ${currentComponent}"
@@ -99,7 +102,8 @@ pipeline {
                                                                 #cd ..
                                                                 git clone -b ${componentObj.ref} "\${COMPONENT_REPO_URL}"
                                                                 cd "\${REPO_NAME}"
-                                                                ls -la
+                                                                cp $WORKSPACE/release-notes/opensearch-\${REPO_NAME}.release-notes-${version}.0.md release-notes/
+                                                                ls -ltr release-notes/
                                                             fi
                                                         """
                                                     }
