@@ -27,6 +27,7 @@ class ReleaseNotes:
         self.date = date
         self.action_type = action_type
         self.filter_commits = ['flaky-test', 'testing']
+        self.token = os.getenv('GITHUB_TOKEN')
 
     def table(self) -> MarkdownTableWriter:
         table_result = []
@@ -103,7 +104,7 @@ class ReleaseNotes:
                     pass
                 else:
                     logging.warning(f"CHANGELOG.md not found in {repo.dir}. Using git log for commit history.")
-                    github_commits = GitHubCommitsFetcher(self.date, component, '')
+                    github_commits = GitHubCommitsFetcher(self.date, component, self.token)
                     commits = github_commits.get_commit_details()
 
         #print(len(commits))

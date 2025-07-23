@@ -96,7 +96,10 @@ pipeline {
                                                                 #git config user.name "opensearch-ci"
 
                                                                 #echo "${GITHUB_TOKEN}" | gh auth login --with-token
-
+                                                                #cd ..
+                                                                git clone -b ${componentObj.ref} "\${COMPONENT_REPO_URL}"
+                                                                cd "\${REPO_NAME}"
+                                                                ls -la
                                                             fi
                                                         """
                                                     }
