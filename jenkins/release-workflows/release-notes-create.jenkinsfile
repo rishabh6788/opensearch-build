@@ -80,12 +80,26 @@ pipeline {
                                                     def componentObj = inputManifestObj.components[currentComponent]
                                                     println("Component object: ${componentObj.name}, ${componentObj.ref}, ${componentObj.repository}")
                                                     echo "Current workspace is $WORKSPACE}"
-                                                    sh "pwd && ls -l"
-                                                    sh """
-                                                        #!/bin/bash
-                                                        set +e
-                                                        ./release_notes.sh generate manifests/${params.INPUT_MANIFEST} --component ${currentComponent} --date ${GIT_LOG_DATE}
-                                                    """
+                                                    withCredentials([usernamePassword(credentialsId: 'jenkins-github-bot-token', passwordVariable: 'GITHUB_TOKEN', usernameVariable: 'GITHUB_USER')]) {
+                                                        sh """
+                                                            #!/bin/bash
+                                                            set +e
+                                                            ./release_notes.sh generate manifests/${params.INPUT_MANIFEST} --component ${currentComponent} --date ${GIT_LOG_DATE}
+
+                                                            if [ \$? -ne 0 ]; then
+                                                                echo "Release notes generation failed for component ${currentComponent}"
+                                                                exit 1
+                                                            else
+                                                                COMPONENT_REPO_URL="${componentObj.repository}"
+                                                                REPO_NAME=\$(basename "\${COMPONENT_REPO_URL}" .git)
+                                                                #git config user.email "opensearch-infra@amazon.com"
+                                                                #git config user.name "opensearch-ci"
+
+                                                                #echo "${GITHUB_TOKEN}" | gh auth login --with-token
+
+                                                            fi
+                                                        """
+                                                    }
                                                 }
                                             }
                                             catch (e) {

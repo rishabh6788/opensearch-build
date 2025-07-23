@@ -117,14 +117,14 @@ class ReleaseNotes:
                         commits_text += f"{i}. PR Subject: {pr_subject}\n"
                         commits_text += f"   Message: {message}\n"
                         commits_text += f"   Labels: {', '.join(labels) if labels else 'None'}\n\n"
-                    print(json.dumps(final_commits, indent=2))
+                    #print(json.dumps(final_commits, indent=2))
                     prompt = COMMIT_PROMPT.format(
                         plugin_name=component.name,
                         version=build_version,
                         repository_url=component.repository,
                         commits_text=commits_text
                     )
-                    print(f"DEBUG: Generated prompt for {component.name}:\n{prompt}")
+                    #print(f"DEBUG: Generated prompt for {component.name}:\n{prompt}")
                     llm_generator = LlmReleaseNotesGenerator()
                 release_notes_raw = llm_generator.generate_release_notes(prompt)
         print(f"current working dir is {os.getcwd()}")
