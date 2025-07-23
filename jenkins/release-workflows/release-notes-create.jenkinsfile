@@ -59,10 +59,14 @@ pipeline {
                     def componentDefaultList = inputManifestObj.getNames()
                     def componentList = COMPONENTS ? COMPONENTS.trim().split(' ') as List : componentDefaultList
                     println("Component list: ${componentList}")
+                    def componentNotes = [:]
                     for (component in componentList) {
-                        componentObj = inputManifestObj.components[component]
-                        println("Component: ${componentObj.name}, Repo: ${componentObj.repository}")
+                        componentNotes["Release notes for ${component}"] = {
+                            def componentObj = inputManifestObj.components[component]
+                            println("Component: ${componentObj.name}, Repo: ${componentObj.repository}")
+                        }
                     }
+                    parallel componentNotes
                 }
             }
         }
