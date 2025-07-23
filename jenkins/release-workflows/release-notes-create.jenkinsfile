@@ -57,6 +57,7 @@ pipeline {
                     def componentList = params.COMPONENTS ? params.COMPONENTS.trim().split(' ') as List : componentDefaultList
                     println("Component list: ${componentList}")
                     def componentNotes = [:]
+                    stash includes: '**', name: "release-notes-opensearch-$BUILD_NUMBER"
 
                     // Method 1: Use eachWithIndex to capture values properly
                     componentList.eachWithIndex { component, component_index ->
@@ -71,12 +72,20 @@ pipeline {
                                 node('Jenkins-Agent-AL2023-X64-M54xlarge-Docker-Host') {
                                     docker.withRegistry('https://public.ecr.aws/') {
                                         docker.image('opensearchstaging/ci-runner:ci-runner-almalinux8-opensearch-build-v1').pull()
-                                        docker.image('opensearchstaging/ci-runner:ci-runner-almalinux8-opensearch-build-v1').inside() {
+                                        docker.image('opensearchstaging/ci-runner:ci-runner-almalinux8-opensearch-build-v1').inside('--network=host') {
                                             try {
                                                 stage("${currentComponent}") {
                                                     sh("echo ${currentComponent} with index ${currentIndex} will sleep ${currentWaitSeconds} seconds to reduce load && sleep ${currentWaitSeconds}")
+                                                    unstash "release-notes-opensearch-$BUILD_NUMBER"
                                                     def componentObj = inputManifestObj.components[currentComponent]
                                                     println("Component object: ${componentObj.name}, ${componentObj.ref}, ${componentObj.repository}")
+                                                    echo "Current workspace is $WORKSPACE}"
+                                                    sh "pwd && ls -l"
+                                                    sh """
+                                                        #!/bin/bash
+                                                        set +e
+                                                        ./release_notes.sh generate manifests/${params.INPUT_MANIFEST} --component ${currentComponent} --date ${GIT_LOG_DATE}
+                                                    """
                                                 }
                                             }
                                             catch (e) {
