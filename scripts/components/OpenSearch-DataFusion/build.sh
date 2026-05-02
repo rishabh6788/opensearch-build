@@ -201,4 +201,21 @@ for plugin in sandbox/plugins/*; do
 done
 cp -v ./sandbox-core-plugins.txt "${OUTPUT}"/core-plugins/
 
+echo "Installing analytics-engine plugin into distribution tar..."
+WORK_DIR=$(mktemp -d)
+tar -xzf "${OUTPUT}/dist/${ARTIFACT_BUILD_NAME}" -C "$WORK_DIR"
+
+OS_HOME="$WORK_DIR/$(ls $WORK_DIR)"
+
+# Install plugin from locally built zip
+"$OS_HOME/bin/opensearch-plugin" install --batch \
+  "file://$(realpath "${OUTPUT}/core-plugins/analytics-engine-3.7.0.zip")"
+
+# Repackage with the same name
+tar -czf "${OUTPUT}/dist/${ARTIFACT_BUILD_NAME}" \
+  -C "$WORK_DIR" "$(ls $WORK_DIR)"
+
+rm -rf "$WORK_DIR"
+echo "Done. Plugin installed and repackaged as ${ARTIFACT_BUILD_NAME}"
+
 echo "Both core-plugins and (sandbox) core-plugins are built now"
