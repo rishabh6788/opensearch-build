@@ -12,10 +12,10 @@ ci:
 components:
   - name: OpenSearch-DataFusion
     repository: https://github.com/sandeshkr419/OpenSearch.git
-    ref: 'fix/disable-skip-partial-agg'
+    ref: 'fix/ffi-import-oom-native-leak'
   - name: core-plugins-sandbox
     repository: https://github.com/sandeshkr419/OpenSearch.git
-    ref: 'fix/disable-skip-partial-agg'
+    ref: 'fix/ffi-import-oom-native-leak'
     working_directory: sandbox/plugins
     depends_on:
       - OpenSearch-DataFusion
