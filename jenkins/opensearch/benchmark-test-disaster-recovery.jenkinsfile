@@ -31,6 +31,10 @@ pipeline {
                 name: 'CLUSTER_ENDPOINT',
                 description: '<Required> Provide an endpoint to a cluster for running benchmark tests against it.',
             )
+            password(
+                name: 'SECONDARY_ENDPOINT',
+                description: '<Required> Provide an endpoint to a secondary cluster for running cross-cluster-replication tests against it.',
+            )
             booleanParam(
                 name: 'SECURITY_ENABLED',
                 description: '<Optional> Mention if the cluster is secured or insecured.',
@@ -40,7 +44,7 @@ pipeline {
                             name: 'BASIC_AUTH',
                             description: '<Optional> Mention if the test will run using basic auth.',
                             defaultValue: false,
-                        )
+            )
             booleanParam(
                 name: 'SIGV4',
                 description: '<Optional> Mention if the test will run using AWS Signature Version 4 authentication.',
@@ -161,6 +165,7 @@ void runDisasterRecoveryBenchmark(String username, String password) {
     runBenchmarkTestScript(
             command: 'execute-test',
             endpoint: CLUSTER_ENDPOINT,
+            secondaryEndpoint: SECONDARY_ENDPOINT,
             insecure: !(params.SECURITY_ENABLED),
             username: username,
             password: password,
