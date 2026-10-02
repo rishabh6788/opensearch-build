@@ -128,8 +128,12 @@ pipeline {
                     echo "security-enabled: ${SECURITY_ENABLED}"
 
                     if (params.BASIC_AUTH) {
-                        withCredentials([string(credentialsId: 'opensearch-benchmark-test-password', variable: 'BASIC_AUTH_PASSWORD')]) {
-                            runDisasterRecoveryBenchmark('admin', "${BASIC_AUTH_PASSWORD}")
+                        def secret_benchmark_auth = [
+                            [envVar: 'BASIC_AUTH_USER', secretRef: 'op://opensearch-release-secrets/benchmark-metrics/benchmark-basic-auth-user'],
+                            [envVar: 'BASIC_AUTH_PASSWORD', secretRef: 'op://opensearch-release-secrets/benchmark-metrics/benchmark-basic-auth-password']
+                        ]
+                        withSecrets(secrets: secret_benchmark_auth) {
+                            runDisasterRecoveryBenchmark("${BASIC_AUTH_USER}", "${BASIC_AUTH_PASSWORD}")
                         }
                     } else {
                         runDisasterRecoveryBenchmark('', '')
