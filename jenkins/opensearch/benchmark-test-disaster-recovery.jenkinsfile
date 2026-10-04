@@ -41,9 +41,9 @@ pipeline {
                 defaultValue: false,
             )
             booleanParam(
-                            name: 'BASIC_AUTH',
-                            description: '<Optional> Mention if the test will run using basic auth.',
-                            defaultValue: false,
+                name: 'BASIC_AUTH',
+                description: '<Optional> Mention if the test will run using basic auth.',
+                defaultValue: false,
             )
             booleanParam(
                 name: 'SIGV4',
@@ -107,6 +107,14 @@ pipeline {
                 description: '<Optional> Allows to set parameters for telemetry devices. Use json type. e.g.,{"node-stats-include-indices":"true","node-stats-include-indices-metrics":"segments"}',
                 trim: true
             )
+    }
+    triggers{
+        parameterizedCron '''
+            H 4,8,12,16 * * * %CLUSTER_ENDPOINT=search-benchmark-dr-domain-iad-njduur4mchgjuqgrgribhrvgoa.us-east-1.es.amazonaws.com;SECONDARY_ENDPOINT=search-benchmark-dr-domain-dub-t2oc6cvd6xrn6m2adoqgpboa5e.eu-west-1.es.amazonaws.com;SECURITY_ENABLED=true;BASIC_AUTH=true;TEST_WORKLOAD=big5;USER_TAGS=run-type:standard-3-7-domain-replication;WORKLOAD_PARAMS={"number_of_shards":30,"number_of_replicas":1,"distribution_version":"3.7.0","bulk_size":5000,"bulk_indexing_clients":4};EXCLUDE_TASKS=type:search;CAPTURE_NODE_STAT=true;TELEMETRY_PARAMS={"node-stats-sample-interval":30}
+            H 4,8,12,16 * * * %CLUSTER_ENDPOINT=search-benchmark-dr-domain-or1-iad-jogatpfigvatu7tvijveswy2pe.us-east-1.es.amazonaws.com;SECONDARY_ENDPOINT=search-benchmark-dr-domain-or1-dub-qu6bc2z6gbkr6zipoeq2bdepcm.eu-west-1.es.amazonaws.com;SECURITY_ENABLED=true;BASIC_AUTH=true;TEST_WORKLOAD=big5;USER_TAGS=run-type:standard-3-7-or1-domain-replication;WORKLOAD_PARAMS={"number_of_shards":30,"number_of_replicas":1,"distribution_version":"3.7.0","bulk_size":5000,"bulk_indexing_clients":4};EXCLUDE_TASKS=type:search;CAPTURE_NODE_STAT=true;TELEMETRY_PARAMS={"node-stats-sample-interval":30}
+            H 0,6,10,20 * * * %CLUSTER_ENDPOINT=search-benchmark-dr-domain-iad-njduur4mchgjuqgrgribhrvgoa.us-east-1.es.amazonaws.com;SECONDARY_ENDPOINT=search-benchmark-dr-domain-dub-t2oc6cvd6xrn6m2adoqgpboa5e.eu-west-1.es.amazonaws.com;SECURITY_ENABLED=true;BASIC_AUTH=true;TEST_WORKLOAD=clickbench;USER_TAGS=run-type:standard-3-7-domain-replication;WORKLOAD_PARAMS={"number_of_shards":30,"number_of_replicas":1,"bulk_size":5000,"bulk_indexing_clients":4};EXCLUDE_TASKS=type:raw-request;CAPTURE_NODE_STAT=true;TELEMETRY_PARAMS={"node-stats-sample-interval":30}
+            H 0,6,10,20 * * * %CLUSTER_ENDPOINT=search-benchmark-dr-domain-or1-iad-jogatpfigvatu7tvijveswy2pe.us-east-1.es.amazonaws.com;SECONDARY_ENDPOINT=search-benchmark-dr-domain-or1-dub-qu6bc2z6gbkr6zipoeq2bdepcm.eu-west-1.es.amazonaws.com;SECURITY_ENABLED=true;BASIC_AUTH=true;TEST_WORKLOAD=clickbench;USER_TAGS=run-type:standard-3-7-or1-domain-replication;WORKLOAD_PARAMS={"number_of_shards":30,"number_of_replicas":1,"bulk_size":5000,"bulk_indexing_clients":4};EXCLUDE_TASKS=type:raw-request;CAPTURE_NODE_STAT=true;TELEMETRY_PARAMS={"node-stats-sample-interval":30}
+        '''
     }
     stages {
         stage('validate-and-set-parameters') {
